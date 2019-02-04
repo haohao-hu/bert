@@ -30,6 +30,9 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string("input_file", None,
                     "Input raw text file (or comma-separated list of files).")
 
+flags.DEFINE_string("class_file", None,
+                    "File containing all target classes.")
+
 flags.DEFINE_string(
     "output_file", None,
     "Output TF example file (or comma-separated list of files).")
@@ -41,6 +44,9 @@ flags.DEFINE_bool(
     "do_lower_case", True,
     "Whether to lower case the input text. Should be True for uncased "
     "models and False for cased models.")
+
+flags.DEFINE_bool("with_category", False,
+    "Set this flag if you are using product title similarity task.")
 
 flags.DEFINE_integer("max_seq_length", 128, "Maximum sequence length.")
 
@@ -171,12 +177,26 @@ def create_float_feature(values):
   feature = tf.train.Feature(float_list=tf.train.FloatList(value=list(values)))
   return feature
 
+def get_labels(data_dir):
+    with open(data_dir, "r", encoding='utf-8') as f:
+        lines = {}
+        for i,line in enumerate(f):
+            lines[str(line).strip('\n')]=i
+        #lines["<unknown>"]=3008
+        assert len(lines)==3008
+    return lines
 
+global sample_to_product_title=[]
+global all_categories=get_labels(FLAGS.class_file)
 def create_training_instances(input_files, tokenizer, max_seq_length,
                               dupe_factor, short_seq_prob, masked_lm_prob,
-                              max_predictions_per_seq, rng):
+                              max_predictions_per_seq, rng, with_category):
   """Create `TrainingInstance`s from raw text."""
-  all_documents = [[]]
+  if with_category:
+    all_documents=[[] for i in range(len(all_categories))]
+    total_num_instances_corpus=0
+  else:
+    all_documents = [[]]
 
   # Input file format:
   # (1) One sentence per line. These should ideally be actual sentences, not
@@ -192,25 +212,43 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
           break
         line = line.strip()
 
+        if with_category:
+          line=line.split('\t')
+          cat=line[1].strip('\n')
+                        
+          #store as one sample
+          sample = {"category_encode": all_categories.get(cat),
+         "within_cat_doc_id": len(all_documents[all_categories.get(cat)]), 
+         }
+          sample_to_product_title.append(sample)
+          tokens = tokenizer.tokenize(line[0])
+          doc.append(tokens)
+          all_documents[all_categories.get(cat)].append(doc)
+          doc=[]
+          total_num_instances_corpus+=1
+        else:
         # Empty lines are used as document delimiters
-        if not line:
-          all_documents.append([])
-        tokens = tokenizer.tokenize(line)
-        if tokens:
-          all_documents[-1].append(tokens)
+          if not line:
+            all_documents.append([])
+          tokens = tokenizer.tokenize(line)
+          if tokens:
+            all_documents[-1].append(tokens)
 
   # Remove empty documents
   all_documents = [x for x in all_documents if x]
-  rng.shuffle(all_documents)
+  if not with_category:
+    rng.shuffle(all_documents)
 
   vocab_words = list(tokenizer.vocab.keys())
   instances = []
+  if not with_category:
+    total_num_instances_corpus=len(all_documents)
   for _ in range(dupe_factor):
-    for document_index in range(len(all_documents)):
+    for document_index in range(total_num_instances_corpus):
       instances.extend(
           create_instances_from_document(
               all_documents, document_index, max_seq_length, short_seq_prob,
-              masked_lm_prob, max_predictions_per_seq, vocab_words, rng))
+              masked_lm_prob, max_predictions_per_seq, vocab_words, rng,with_category))
 
   rng.shuffle(instances)
   return instances
@@ -218,9 +256,14 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
 
 def create_instances_from_document(
     all_documents, document_index, max_seq_length, short_seq_prob,
-    masked_lm_prob, max_predictions_per_seq, vocab_words, rng):
+    masked_lm_prob, max_predictions_per_seq, vocab_words, rng, with_category):
   """Creates `TrainingInstance`s for a single document."""
-  document = all_documents[document_index]
+  if with_category:
+    sample=sample_to_product_title[document_index]
+    document=all_documents[sample["category_encode"]] #big document containing all titles from the same category
+
+  else:
+    document = all_documents[document_index]
 
   # Account for [CLS], [SEP], [SEP]
   max_num_tokens = max_seq_length - 3
@@ -244,7 +287,10 @@ def create_instances_from_document(
   instances = []
   current_chunk = []
   current_length = 0
-  i = 0
+  if with_category:
+    i=sample["within_cat_doc_id"]
+  else:
+    i = 0
   while i < len(document):
     segment = document[i]
     current_chunk.append(segment)
@@ -272,6 +318,8 @@ def create_instances_from_document(
           # corpora. However, just to be careful, we try to make sure that
           # the random document is not the same as the document
           # we're processing.
+          if with_category:
+            document_index=sample["category_encode"] #category index            
           for _ in range(10):
             random_document_index = rng.randint(0, len(all_documents) - 1)
             if random_document_index != document_index:
@@ -424,7 +472,7 @@ def main(_):
   instances = create_training_instances(
       input_files, tokenizer, FLAGS.max_seq_length, FLAGS.dupe_factor,
       FLAGS.short_seq_prob, FLAGS.masked_lm_prob, FLAGS.max_predictions_per_seq,
-      rng)
+      rng,FLAGS.with_category)
 
   output_files = FLAGS.output_file.split(",")
   tf.logging.info("*** Writing to output files ***")
