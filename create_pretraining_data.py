@@ -72,49 +72,49 @@ class TrainingInstance(object):
 
   def __init__(self, tokens, segment_ids, masked_lm_positions, masked_lm_labels,
                is_random_next):
-    self.tokens = tokens
-    self.segment_ids = segment_ids
-    self.is_random_next = is_random_next
-    self.masked_lm_positions = masked_lm_positions
-    self.masked_lm_labels = masked_lm_labels
+        self.tokens = tokens
+        self.segment_ids = segment_ids
+        self.is_random_next = is_random_next
+        self.masked_lm_positions = masked_lm_positions
+        self.masked_lm_labels = masked_lm_labels
 
-  def __str__(self):
-    s = ""
-    s += "tokens: %s\n" % (" ".join(
-        [tokenization.printable_text(x) for x in self.tokens]))
-    s += "segment_ids: %s\n" % (" ".join([str(x) for x in self.segment_ids]))
-    s += "is_random_next: %s\n" % self.is_random_next
-    s += "masked_lm_positions: %s\n" % (" ".join(
-        [str(x) for x in self.masked_lm_positions]))
-    s += "masked_lm_labels: %s\n" % (" ".join(
-        [tokenization.printable_text(x) for x in self.masked_lm_labels]))
-    s += "\n"
-    return s
+def __str__(self):
+        s = ""
+        s += "tokens: %s\n" % (" ".join(
+            [tokenization.printable_text(x) for x in self.tokens]))
+        s += "segment_ids: %s\n" % (" ".join([str(x) for x in self.segment_ids]))
+        s += "is_random_next: %s\n" % self.is_random_next
+        s += "masked_lm_positions: %s\n" % (" ".join(
+            [str(x) for x in self.masked_lm_positions]))
+        s += "masked_lm_labels: %s\n" % (" ".join(
+            [tokenization.printable_text(x) for x in self.masked_lm_labels]))
+        s += "\n"
+        return s
 
-  def __repr__(self):
-    return self.__str__()
+def __repr__(self):
+        return self.__str__()
 
 
 def write_instance_to_example_files(instances, tokenizer, max_seq_length,
                                     max_predictions_per_seq, output_files):
-  """Create TF example files from `TrainingInstance`s."""
-  writers = []
-  for output_file in output_files:
-    writers.append(tf.python_io.TFRecordWriter(output_file))
+    """Create TF example files from `TrainingInstance`s."""
+    writers = []
+    for output_file in output_files:
+        writers.append(tf.python_io.TFRecordWriter(output_file))
 
-  writer_index = 0
+    writer_index = 0
 
-  total_written = 0
-  for (inst_index, instance) in enumerate(instances):
-    input_ids = tokenizer.convert_tokens_to_ids(instance.tokens)
-    input_mask = [1] * len(input_ids)
-    segment_ids = list(instance.segment_ids)
-    assert len(input_ids) <= max_seq_length
+    total_written = 0
+    for (inst_index, instance) in enumerate(instances):
+        input_ids = tokenizer.convert_tokens_to_ids(instance.tokens)
+        input_mask = [1] * len(input_ids)
+        segment_ids = list(instance.segment_ids)
+        assert len(input_ids) <= max_seq_length
 
-    while len(input_ids) < max_seq_length:
-      input_ids.append(0)
-      input_mask.append(0)
-      segment_ids.append(0)
+        while len(input_ids) < max_seq_length:
+            input_ids.append(0)
+            input_mask.append(0)
+            segment_ids.append(0)
 
     assert len(input_ids) == max_seq_length
     assert len(input_mask) == max_seq_length
@@ -125,9 +125,9 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
     masked_lm_weights = [1.0] * len(masked_lm_ids)
 
     while len(masked_lm_positions) < max_predictions_per_seq:
-      masked_lm_positions.append(0)
-      masked_lm_ids.append(0)
-      masked_lm_weights.append(0.0)
+        masked_lm_positions.append(0)
+        masked_lm_ids.append(0)
+        masked_lm_weights.append(0.0)
 
     next_sentence_label = 1 if instance.is_random_next else 0
 
@@ -148,34 +148,34 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
     total_written += 1
 
     if inst_index < 20:
-      tf.logging.info("*** Example ***")
-      tf.logging.info("tokens: %s" % " ".join(
+        tf.logging.info("*** Example ***")
+        tf.logging.info("tokens: %s" % " ".join(
           [tokenization.printable_text(x) for x in instance.tokens]))
 
-      for feature_name in features.keys():
+    for feature_name in features.keys():
         feature = features[feature_name]
         values = []
         if feature.int64_list.value:
-          values = feature.int64_list.value
+            values = feature.int64_list.value
         elif feature.float_list.value:
-          values = feature.float_list.value
+            values = feature.float_list.value
         tf.logging.info(
             "%s: %s" % (feature_name, " ".join([str(x) for x in values])))
 
-  for writer in writers:
-    writer.close()
+    for writer in writers:
+        writer.close()
 
-  tf.logging.info("Wrote %d total instances", total_written)
+    tf.logging.info("Wrote %d total instances", total_written)
 
 
 def create_int_feature(values):
-  feature = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
-  return feature
+    feature = tf.train.Feature(int64_list=tf.train.Int64List(value=list(values)))
+    return feature
 
 
 def create_float_feature(values):
-  feature = tf.train.Feature(float_list=tf.train.FloatList(value=list(values)))
-  return feature
+    feature = tf.train.Feature(float_list=tf.train.FloatList(value=list(values)))
+    return feature
 
 def get_labels(data_dir):
     with open(data_dir, "r", encoding='utf-8') as f:
@@ -186,17 +186,17 @@ def get_labels(data_dir):
         assert len(lines)==3008
     return lines
 
-global sample_to_product_title=[]
-global all_categories=get_labels(FLAGS.class_file)
+sample_to_product_title=[]
+all_categories=get_labels(FLAGS.class_file)
 def create_training_instances(input_files, tokenizer, max_seq_length,
                               dupe_factor, short_seq_prob, masked_lm_prob,
                               max_predictions_per_seq, rng, with_category):
-  """Create `TrainingInstance`s from raw text."""
-  if with_category:
-    all_documents=[[] for i in range(len(all_categories))]
-    total_num_instances_corpus=0
-  else:
-    all_documents = [[]]
+    """Create `TrainingInstance`s from raw text."""
+    if with_category:
+        all_documents=[[] for i in range(len(all_categories))]
+        total_num_instances_corpus=0
+    else:
+        all_documents = [[]]
 
   # Input file format:
   # (1) One sentence per line. These should ideally be actual sentences, not
@@ -204,69 +204,69 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
   # sentence boundaries for the "next sentence prediction" task).
   # (2) Blank lines between documents. Document boundaries are needed so
   # that the "next sentence prediction" task doesn't span between documents.
-  for input_file in input_files:
-    with tf.gfile.GFile(input_file, "r") as reader:
-      while True:
-        line = tokenization.convert_to_unicode(reader.readline())
-        if not line:
-          break
-        line = line.strip()
+    for input_file in input_files:
+        with tf.gfile.GFile(input_file, "r") as reader:
+            while True:
+                line = tokenization.convert_to_unicode(reader.readline())
+                if not line:
+                    break
+                line = line.strip()
 
-        if with_category:
-          line=line.split('\t')
-          cat=line[1].strip('\n')
+                if with_category:
+                    doc=[]
+                    line=line.split('\t')
+                    cat=line[1].strip('\n')
                         
           #store as one sample
-          sample = {"category_encode": all_categories.get(cat),
+                    sample = {"category_encode": all_categories.get(cat),
          "within_cat_doc_id": len(all_documents[all_categories.get(cat)]), 
          }
-          sample_to_product_title.append(sample)
-          tokens = tokenizer.tokenize(line[0])
-          doc.append(tokens)
-          all_documents[all_categories.get(cat)].append(doc)
-          doc=[]
-          total_num_instances_corpus+=1
-        else:
+                    sample_to_product_title.append(sample)
+                    tokens = tokenizer.tokenize(line[0])
+                    doc.append(tokens)
+                    all_documents[all_categories.get(cat)].append(doc)
+                    #doc=[]
+                    total_num_instances_corpus+=1
+                else:
         # Empty lines are used as document delimiters
-          if not line:
-            all_documents.append([])
-          tokens = tokenizer.tokenize(line)
-          if tokens:
-            all_documents[-1].append(tokens)
+                    if not line:
+                        all_documents.append([])
+                    tokens = tokenizer.tokenize(line)
+                    if tokens:
+                        all_documents[-1].append(tokens)
 
   # Remove empty documents
-  all_documents = [x for x in all_documents if x]
-  if not with_category:
-    rng.shuffle(all_documents)
+        all_documents = [x for x in all_documents if x]
+        if not with_category:
+            rng.shuffle(all_documents)
 
-  vocab_words = list(tokenizer.vocab.keys())
-  instances = []
-  if not with_category:
-    total_num_instances_corpus=len(all_documents)
-  for _ in range(dupe_factor):
-    for document_index in range(total_num_instances_corpus):
-      instances.extend(
+    vocab_words = list(tokenizer.vocab.keys())
+    instances = []
+    if not with_category:
+        total_num_instances_corpus=len(all_documents)
+    for _ in range(dupe_factor):
+          for document_index in range(total_num_instances_corpus):
+                instances.extend(
           create_instances_from_document(
               all_documents, document_index, max_seq_length, short_seq_prob,
               masked_lm_prob, max_predictions_per_seq, vocab_words, rng,with_category))
 
-  rng.shuffle(instances)
-  return instances
+    rng.shuffle(instances)
+    return instances
 
 
 def create_instances_from_document(
     all_documents, document_index, max_seq_length, short_seq_prob,
     masked_lm_prob, max_predictions_per_seq, vocab_words, rng, with_category):
-  """Creates `TrainingInstance`s for a single document."""
-  if with_category:
-    sample=sample_to_product_title[document_index]
-    document=all_documents[sample["category_encode"]] #big document containing all titles from the same category
-
-  else:
-    document = all_documents[document_index]
+    """Creates `TrainingInstance`s for a single document."""
+    if with_category:
+        sample=sample_to_product_title[document_index]
+        document=all_documents[sample["category_encode"]] #big document containing all titles from the same category
+    else:
+        document = all_documents[document_index]
 
   # Account for [CLS], [SEP], [SEP]
-  max_num_tokens = max_seq_length - 3
+    max_num_tokens = max_seq_length - 3
 
   # We *usually* want to fill up the entire sequence since we are padding
   # to `max_seq_length` anyways, so short sequences are generally wasted
@@ -275,108 +275,108 @@ def create_instances_from_document(
   # sequences to minimize the mismatch between pre-training and fine-tuning.
   # The `target_seq_length` is just a rough target however, whereas
   # `max_seq_length` is a hard limit.
-  target_seq_length = max_num_tokens
-  if rng.random() < short_seq_prob:
-    target_seq_length = rng.randint(2, max_num_tokens)
+    target_seq_length = max_num_tokens
+    if rng.random() < short_seq_prob:
+        target_seq_length = rng.randint(2, max_num_tokens)
 
   # We DON'T just concatenate all of the tokens from a document into a long
   # sequence and choose an arbitrary split point because this would make the
   # next sentence prediction task too easy. Instead, we split the input into
   # segments "A" and "B" based on the actual "sentences" provided by the user
   # input.
-  instances = []
-  current_chunk = []
-  current_length = 0
-  if with_category:
-    i=sample["within_cat_doc_id"]
-  else:
-    i = 0
-  while i < len(document):
-    segment = document[i]
-    current_chunk.append(segment)
-    current_length += len(segment)
-    if i == len(document) - 1 or current_length >= target_seq_length:
-      if current_chunk:
+    instances = []
+    current_chunk = []
+    current_length = 0
+    if with_category:
+        i=sample["within_cat_doc_id"]
+    else:
+        i = 0
+    while i < len(document):
+        segment = document[i]
+        current_chunk.append(segment)
+        current_length += len(segment)
+        if i == len(document) - 1 or current_length >= target_seq_length:
+            if current_chunk:
         # `a_end` is how many segments from `current_chunk` go into the `A`
         # (first) sentence.
-        a_end = 1
-        if len(current_chunk) >= 2:
-          a_end = rng.randint(1, len(current_chunk) - 1)
+                a_end = 1
+            if len(current_chunk) >= 2:
+                a_end = rng.randint(1, len(current_chunk) - 1)
 
-        tokens_a = []
-        for j in range(a_end):
-          tokens_a.extend(current_chunk[j])
+            tokens_a = []
+            for j in range(a_end):
+                tokens_a.extend(current_chunk[j])
 
-        tokens_b = []
+            tokens_b = []
         # Random next
-        is_random_next = False
-        if len(current_chunk) == 1 or rng.random() < 0.5:
-          is_random_next = True
-          target_b_length = target_seq_length - len(tokens_a)
+            is_random_next = False
+            if len(current_chunk) == 1 or rng.random() < 0.5:
+                is_random_next = True
+                target_b_length = target_seq_length - len(tokens_a)
 
           # This should rarely go for more than one iteration for large
           # corpora. However, just to be careful, we try to make sure that
           # the random document is not the same as the document
           # we're processing.
-          if with_category:
-            document_index=sample["category_encode"] #category index            
-          for _ in range(10):
-            random_document_index = rng.randint(0, len(all_documents) - 1)
-            if random_document_index != document_index:
-              break
+                if with_category:
+                    document_index=sample["category_encode"] #category index            
+                for _ in range(10):
+                    random_document_index = rng.randint(0, len(all_documents) - 1)
+                    if random_document_index != document_index:
+                        break
 
-          random_document = all_documents[random_document_index]
-          random_start = rng.randint(0, len(random_document) - 1)
-          for j in range(random_start, len(random_document)):
-            tokens_b.extend(random_document[j])
-            if len(tokens_b) >= target_b_length:
-              break
+                random_document = all_documents[random_document_index]
+                random_start = rng.randint(0, len(random_document) - 1)
+                for j in range(random_start, len(random_document)):
+                    tokens_b.extend(random_document[j])
+                    if len(tokens_b) >= target_b_length:
+                        break
           # We didn't actually use these segments so we "put them back" so
           # they don't go to waste.
-          num_unused_segments = len(current_chunk) - a_end
-          i -= num_unused_segments
+                num_unused_segments = len(current_chunk) - a_end
+                i -= num_unused_segments
         # Actual next
-        else:
-          is_random_next = False
-          for j in range(a_end, len(current_chunk)):
-            tokens_b.extend(current_chunk[j])
-        truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng)
+            else:
+                is_random_next = False
+                for j in range(a_end, len(current_chunk)):
+                    tokens_b.extend(current_chunk[j])
+                truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng)
 
-        assert len(tokens_a) >= 1
-        assert len(tokens_b) >= 1
+            assert len(tokens_a) >= 1
+            assert len(tokens_b) >= 1
 
-        tokens = []
-        segment_ids = []
-        tokens.append("[CLS]")
-        segment_ids.append(0)
-        for token in tokens_a:
-          tokens.append(token)
-          segment_ids.append(0)
+            tokens = []
+            segment_ids = []
+            tokens.append("[CLS]")
+            segment_ids.append(0)
+            for token in tokens_a:
+                tokens.append(token)
+                segment_ids.append(0)
 
-        tokens.append("[SEP]")
-        segment_ids.append(0)
+            tokens.append("[SEP]")
+            segment_ids.append(0)
 
-        for token in tokens_b:
-          tokens.append(token)
-          segment_ids.append(1)
-        tokens.append("[SEP]")
-        segment_ids.append(1)
+            for token in tokens_b:
+                tokens.append(token)
+                segment_ids.append(1)
+            tokens.append("[SEP]")
+            segment_ids.append(1)
 
-        (tokens, masked_lm_positions,
+            (tokens, masked_lm_positions,
          masked_lm_labels) = create_masked_lm_predictions(
              tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng)
-        instance = TrainingInstance(
-            tokens=tokens,
-            segment_ids=segment_ids,
-            is_random_next=is_random_next,
-            masked_lm_positions=masked_lm_positions,
-            masked_lm_labels=masked_lm_labels)
-        instances.append(instance)
-      current_chunk = []
-      current_length = 0
-    i += 1
+            instance = TrainingInstance(
+                tokens=tokens,
+                segment_ids=segment_ids,
+                is_random_next=is_random_next,
+                masked_lm_positions=masked_lm_positions,
+                masked_lm_labels=masked_lm_labels)
+            instances.append(instance)
+            current_chunk = []
+            current_length = 0
+        i += 1
 
-  return instances
+    return instances
 
 
 MaskedLmInstance = collections.namedtuple("MaskedLmInstance",
@@ -385,34 +385,34 @@ MaskedLmInstance = collections.namedtuple("MaskedLmInstance",
 
 def create_masked_lm_predictions(tokens, masked_lm_prob,
                                  max_predictions_per_seq, vocab_words, rng):
-  """Creates the predictions for the masked LM objective."""
+    """Creates the predictions for the masked LM objective."""
 
-  cand_indexes = []
-  for (i, token) in enumerate(tokens):
-    if token == "[CLS]" or token == "[SEP]":
-      continue
-    cand_indexes.append(i)
+    cand_indexes = []
+    for (i, token) in enumerate(tokens):
+        if token == "[CLS]" or token == "[SEP]":
+            continue
+        cand_indexes.append(i)
 
-  rng.shuffle(cand_indexes)
+    rng.shuffle(cand_indexes)
 
-  output_tokens = list(tokens)
+    output_tokens = list(tokens)
 
-  num_to_predict = min(max_predictions_per_seq,
+    num_to_predict = min(max_predictions_per_seq,
                        max(1, int(round(len(tokens) * masked_lm_prob))))
 
-  masked_lms = []
-  covered_indexes = set()
-  for index in cand_indexes:
-    if len(masked_lms) >= num_to_predict:
-      break
-    if index in covered_indexes:
-      continue
-    covered_indexes.add(index)
+    masked_lms = []
+    covered_indexes = set()
+    for index in cand_indexes:
+        if len(masked_lms) >= num_to_predict:
+            break
+        if index in covered_indexes:
+            continue
+        covered_indexes.add(index)
 
     masked_token = None
     # 80% of the time, replace with [MASK]
     if rng.random() < 0.8:
-      masked_token = "[MASK]"
+         masked_token = "[MASK]"
     else:
       # 10% of the time, keep original
       if rng.random() < 0.5:
@@ -425,66 +425,67 @@ def create_masked_lm_predictions(tokens, masked_lm_prob,
 
     masked_lms.append(MaskedLmInstance(index=index, label=tokens[index]))
 
-  masked_lms = sorted(masked_lms, key=lambda x: x.index)
+    masked_lms = sorted(masked_lms, key=lambda x: x.index)
 
-  masked_lm_positions = []
-  masked_lm_labels = []
-  for p in masked_lms:
-    masked_lm_positions.append(p.index)
-    masked_lm_labels.append(p.label)
+    masked_lm_positions = []
+    masked_lm_labels = []
+    for p in masked_lms:
+        masked_lm_positions.append(p.index)
+        masked_lm_labels.append(p.label)
 
-  return (output_tokens, masked_lm_positions, masked_lm_labels)
+    return (output_tokens, masked_lm_positions, masked_lm_labels)
 
 
 def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens, rng):
-  """Truncates a pair of sequences to a maximum sequence length."""
-  while True:
-    total_length = len(tokens_a) + len(tokens_b)
-    if total_length <= max_num_tokens:
-      break
+    """Truncates a pair of sequences to a maximum sequence length."""
+    while True:
+        total_length = len(tokens_a) + len(tokens_b)
+        if total_length <= max_num_tokens:
+            break
 
-    trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
-    assert len(trunc_tokens) >= 1
+        trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
+        assert len(trunc_tokens) >= 1
 
     # We want to sometimes truncate from the front and sometimes from the
     # back to add more randomness and avoid biases.
-    if rng.random() < 0.5:
-      del trunc_tokens[0]
-    else:
-      trunc_tokens.pop()
+        if rng.random() < 0.5:
+            del trunc_tokens[0]
+        else:
+            trunc_tokens.pop()
 
 
 def main(_):
-  tf.logging.set_verbosity(tf.logging.INFO)
+    tf.logging.set_verbosity(tf.logging.INFO)
 
-  tokenizer = tokenization.FullTokenizer(
+    tokenizer = tokenization.FullTokenizer(
       vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
 
-  input_files = []
-  for input_pattern in FLAGS.input_file.split(","):
-    input_files.extend(tf.gfile.Glob(input_pattern))
+    input_files = []
 
-  tf.logging.info("*** Reading from input files ***")
-  for input_file in input_files:
-    tf.logging.info("  %s", input_file)
+    for input_pattern in FLAGS.input_file.split(","):
+        input_files.extend(tf.gfile.Glob(input_pattern))
 
-  rng = random.Random(FLAGS.random_seed)
-  instances = create_training_instances(
+    tf.logging.info("*** Reading from input files ***")
+    for input_file in input_files:
+        tf.logging.info("  %s", input_file)
+
+    rng = random.Random(FLAGS.random_seed)
+    instances = create_training_instances(
       input_files, tokenizer, FLAGS.max_seq_length, FLAGS.dupe_factor,
       FLAGS.short_seq_prob, FLAGS.masked_lm_prob, FLAGS.max_predictions_per_seq,
       rng,FLAGS.with_category)
 
-  output_files = FLAGS.output_file.split(",")
-  tf.logging.info("*** Writing to output files ***")
-  for output_file in output_files:
-    tf.logging.info("  %s", output_file)
+    output_files = FLAGS.output_file.split(",")
+    tf.logging.info("*** Writing to output files ***")
+    for output_file in output_files:
+        tf.logging.info("  %s", output_file)
 
-  write_instance_to_example_files(instances, tokenizer, FLAGS.max_seq_length,
+    write_instance_to_example_files(instances, tokenizer, FLAGS.max_seq_length,
                                   FLAGS.max_predictions_per_seq, output_files)
 
 
 if __name__ == "__main__":
-  flags.mark_flag_as_required("input_file")
-  flags.mark_flag_as_required("output_file")
-  flags.mark_flag_as_required("vocab_file")
-  tf.app.run()
+    flags.mark_flag_as_required("input_file")
+    flags.mark_flag_as_required("output_file")
+    flags.mark_flag_as_required("vocab_file")
+    tf.app.run()
