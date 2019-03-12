@@ -25,7 +25,11 @@ import modeling
 import optimization
 import tokenization
 import tensorflow as tf
+import warnings
+from sklearn.metrics import precision_recall_fscore_support as fscore
+import numpy as np
 
+tfe = tf.contrib.eager
 flags = tf.flags
 
 FLAGS = flags.FLAGS
@@ -77,9 +81,9 @@ flags.DEFINE_bool(
 
 flags.DEFINE_integer("train_batch_size", 32, "Total batch size for training.")
 
-flags.DEFINE_integer("eval_batch_size", 8, "Total batch size for eval.")
+flags.DEFINE_integer("eval_batch_size", 320, "Total batch size for eval.")
 
-flags.DEFINE_integer("predict_batch_size", 8, "Total batch size for predict.")
+flags.DEFINE_integer("predict_batch_size", 320, "Total batch size for predict.")
 
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
 
@@ -373,6 +377,49 @@ class ColaProcessor(DataProcessor):
           InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
     return examples
 
+class RdcdProcessor(DataProcessor):
+  """Processor for the SIGIR eCom Rakuten Data Challenge Dataset."""
+
+  def get_train_examples(self, data_dir, no_truncate=False):
+    """See base class."""
+    if no_truncate:
+      return self._create_examples(
+           self._read_tsv(input_file=(os.path.join(data_dir, "train.tsv"),os.path.join(data_dir, "val.tsv")
+                           ,os.path.join(data_dir, "rdc-catalog-gold.tsv"))), "whole dataset (train,test and dev)")
+    else:
+      return self._create_examples(
+                self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+  def get_dev_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "val.tsv")), "dev")
+            #self._read_tsv(os.path.join(data_dir, "train-tiny-testing.tsv")), "dev")
+    
+  def get_test_examples(self, data_dir):
+    """See base class."""
+    return self._create_examples(
+            #self._read_tsv(os.path.join(data_dir, "train-tiny-testing.tsv")), "test")
+            self._read_tsv(os.path.join(data_dir, "rdc-catalog-gold.tsv")), "test")
+        
+
+  def get_labels(self, data_dir):
+    """See base class."""
+    with open(os.path.join(data_dir,"classes.txt"), "r") as f: #, encoding='utf-8'
+      lines = []
+      for line in f:
+        lines.append(str(line).strip('\r\n').strip('\n'))
+    return lines
+
+  def _create_examples(self, lines, set_type):
+    """Creates examples for the training and dev sets."""
+    examples = []
+    for (i, line) in enumerate(lines):
+      guid = "%s-%s" % (set_type, i)
+      text_a = tokenization.convert_to_unicode(line[0])
+      label = tokenization.convert_to_unicode(line[1])
+      examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+    return examples
 
 def convert_single_example(ex_index, example, label_list, max_seq_length,
                            tokenizer):
@@ -615,6 +662,124 @@ def create_model(bert_config, is_training, input_ids, input_mask, segment_ids,
 
     return (loss, per_example_loss, logits, probabilities)
 
+# def logprob_scale(x):
+#   return x - tf.reduce_max(x, axis=1, keepdims=True)
+def logprob_scale(x):
+    return x - np.max(x, axis=1, keepdims=True)
+# def pred_from_probs(probs): #method from mcskinner
+#   prob_freq = tf.reduce_sum(probs, axis=0)
+#   n_out = prob_freq.get_shape().as_list()[0]
+#   pcuts = [] # tf.zeros(n_out)
+#   #tensor_array=tf.TensorArray(tf.int32,1,dynamic_size=True,infer_shape=False)
+#   #n_out_array=tensor_array.unstack(n_out)
+#   for i in range(n_out):
+#     ps = probs[:, i]
+#     ps=tf.contrib.framework.sort(ps, direction="DESCENDING")
+#     cp = tf.cumsum(ps)
+#     mass = prob_freq[i]
+#     prec = cp / (1+tf.cast(tf.range(tf.shape(cp)[0]),dtype=tf.float32))
+#     rec = cp / mass
+#     f1 = 2*prec*rec / (prec+rec)
+#     pcuts.append(ps[tf.argmax(f1)])
+#   pcuts= tf.stack(pcuts)
+#   return pcuts
+def pred_from_probs(probs): #method from mcskinner
+    prob_freq = np.sum(probs, axis=0)
+    n_out = prob_freq.shape[0]
+    pcuts = np.zeros(n_out)
+    for i in range(n_out):
+        ps = probs[:, i]
+        ps = ps[ps.argsort()][::-1]
+        cp = np.cumsum(ps)
+        mass = prob_freq[i]
+        prec = cp / (1+np.arange(cp.shape[0]))
+        rec = cp / mass
+        f1 = 2*prec*rec / (prec+rec)
+        pcuts[i] = ps[np.argmax(f1)]
+    return pcuts
+# def predict(scores, tune_f1=False):
+#   if not tune_f1:
+#     return tf.argmax(scores,axis=-1,output_type=tf.int32)
+#   scores=logprob_scale(scores)
+#   probs = tf.nn.softmax(scores, axis=-1)
+#   pcuts = pred_from_probs(probs)
+#   pcuts=tf.broadcast_to(tf.transpose(pcuts),[tf.shape(probs)[0],tf.shape(pcuts)[0]])
+#   #print('broadcasted pcuts:',pcuts)
+#   #print((probs-pcuts)>=0)
+#   mask=tf.cast((probs-pcuts)>=0,dtype=tf.float32)
+#   #print(mask)
+#   probs=mask*probs
+#   #print('new probs',probs)
+#   #probs[probs < pcuts] = 0
+#   temp=tf.zeros([tf.shape(probs)[0],tf.shape(pcuts)[1]-1])
+#   ones=tf.ones([tf.shape(probs)[0],1])*1e-9
+#   #print(ones)
+#   #print(temp)
+#   probs = probs+tf.concat([temp,ones],1)
+#   #print(probs)
+#   #probs[:, -1] += 1e-9
+#   return tf.argmax(probs,axis=-1)
+def softmax(x):
+    e_x = np.exp(logprob_scale(x))
+    return e_x / e_x.sum(axis=1, keepdims=True)
+
+def predict(scores, tune_f1=False):
+    if not tune_f1:
+        return scores.argmax(axis=1)
+    probs = softmax(scores)
+    pcuts = pred_from_probs(probs)
+    probs[probs < pcuts] = 0
+    probs[:, -1] += 1e-9
+    return probs.argmax(axis=1)
+
+# def score(preds, targs,sample_weight=None):
+#   with warnings.catch_warnings():
+#     warnings.simplefilter("ignore")
+#     if sample_weight==None:
+#       sample_weight=tf.ones(tf.shape(preds),dtype=tf.float32)
+#     padding=tf.count_nonzero(sample_weight)
+#     targs=tf.slice(targs,[0],[padding])
+#     preds=tf.slice(preds,[0],[padding])
+#     y_true=tf.one_hot(targs, depth=3008)
+#     y_pred=tf.one_hot(preds, depth=3008)
+#     #def tf_f1_score(y_true, y_pred):
+#     # """Computes weighted precision, recall and f1 scores.
+#     # weighted: weighted average of f1 scores per class,
+#     #         weighted from the support of each class
+
+#     # Args:
+#     #     y_true (Tensor): labels, with shape (batch, num_classes)
+#     #     y_pred (Tensor): model's predictions, same shape as y_true
+
+#     # Returns:
+#     #     tuple(Tensor): (weighted)
+#     #                 tuple of the computed precision, recall and f1 scores
+#     # """
+
+#     y_true = tf.cast(y_true, tf.float64)
+#     y_pred = tf.cast(y_pred, tf.float64)
+
+#     axis=0
+#     TP = tf.count_nonzero(y_pred * y_true, axis=axis,dtype=tf.float64)
+#     FP = tf.count_nonzero(y_pred * (y_true - 1), axis=axis,dtype=tf.float64)
+#     FN = tf.count_nonzero((y_pred - 1) * y_true, axis=axis,dtype=tf.float64)
+
+#     precision = TP / (TP + FP)
+#     recall = TP / (TP + FN)
+#     f1 = 2 * precision * recall / (precision + recall)
+
+#     weights = tf.reduce_sum(y_true, axis=0)
+#     weights /= tf.reduce_sum(weights)
+
+#     weighted_p = tf.reduce_sum(precision * weights)
+#     weighted_r = tf.reduce_sum(recall * weights)
+#     weighted_f1 = tf.reduce_sum(f1 * weights)
+#   return weighted_p, weighted_r, weighted_f1 
+def score(preds, targs):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        p, r, f1, _ = fscore(targs, preds, pos_label=None, average='weighted')
+    return p, r, f1
 
 def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
                      num_train_steps, num_warmup_steps, use_tpu,
@@ -682,13 +847,17 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
     elif mode == tf.estimator.ModeKeys.EVAL:
 
       def metric_fn(per_example_loss, label_ids, logits, is_real_example):
+        #predictions=[]
+        #for tune_f1 in False, True:
+        #  predictions=predict(logits, tune_f1=tune_f1)
         predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
         accuracy = tf.metrics.accuracy(
-            labels=label_ids, predictions=predictions, weights=is_real_example)
+      labels=label_ids, predictions=predictions, weights=is_real_example)
         loss = tf.metrics.mean(values=per_example_loss, weights=is_real_example)
         return {
-            "eval_accuracy": accuracy,
-            "eval_loss": loss,
+          "eval_accuracy": accuracy,
+          #"tuned_eval_accuracy": acc[1],
+          "eval_loss": loss,
         }
 
       eval_metrics = (metric_fn,
@@ -701,7 +870,9 @@ def model_fn_builder(bert_config, num_labels, init_checkpoint, learning_rate,
     else:
       output_spec = tf.contrib.tpu.TPUEstimatorSpec(
           mode=mode,
-          predictions={"probabilities": probabilities},
+          predictions={#"probabilities": probabilities,
+          "logits":logits,
+          "label_ids":label_ids},
           scaffold_fn=scaffold_fn)
     return output_spec
 
@@ -773,12 +944,61 @@ def convert_examples_to_features(examples, label_list, max_seq_length,
     if ex_index % 10000 == 0:
       tf.logging.info("Writing example %d of %d" % (ex_index, len(examples)))
 
-    feature = convert_single_example(ex_index, example, label_list,
-                                     max_seq_length, tokenizer)
+    feature = convert_single_example(ex_index, example, label_list, max_seq_length, tokenizer)
 
     features.append(feature)
   return features
 
+def extended_metric_fn(label_ids, logits):
+      predictions=[]
+      #acc=[]
+      p_s=[]
+      r_s=[]
+      f1_s=[]
+      #sess=tf.Session()
+      #with sess.as_default():
+        #sess.run(tf.global_variables_initializer())
+        #logits=[x.eval() for x in logits]
+        #label_ids=[x.eval() for x in label_ids]
+      logits=np.stack(logits)
+      label_ids=np.stack(label_ids)
+      #  print("debug: logits: ", logits)
+      #  print("label ids:", label_ids)
+      for tune_f1 in False, True:
+        predictions=predict(logits, tune_f1=tune_f1)
+        #predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
+          #accuracy = tf.metrics.accuracy(
+          #  labels=label_ids, predictions=predictions)
+        p,r,f1=score(predictions,label_ids)
+          #acc.append(accuracy)
+        p_s.append(p)
+        r_s.append(r)
+        f1_s.append(f1)
+        #loss = tf.metrics.mean(values=per_example_loss)
+        #sess=tf.Session()
+       # with sess.as_default():
+        #  sess.run(tf.global_variables_initializer())
+        #eval_acc=acc[0][0].eval()
+        #acc2= acc[1][0].eval()
+      p= p_s[0] #.eval()
+      r= r_s[0] #.eval()
+      f1= f1_s[0] #.eval()
+      p2= p_s[1] #.eval()
+      r2= r_s[1] #.eval()
+      f1_2= f1_s[1] #.eval()
+      print("debug metric function:",p,r,f1,p2,r2,f1_2)
+      #sess.close()
+      return {
+          #"eval_accuracy": eval_acc,
+          #"tuned_eval_accuracy": acc2,
+          #"eval_loss": loss,
+          'weighted-p': p,
+          'weighted-r (accuracy)': r,
+          'weighted-f1': f1,
+          'F1 tuned weighted-p': p2,
+          'F1 tuned weighted-r': r2,
+          'F1 tuned weighted-f1': f1_2,
+      }
 
 def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
@@ -788,10 +1008,10 @@ def main(_):
       "mnli": MnliProcessor,
       "mrpc": MrpcProcessor,
       "xnli": XnliProcessor,
+      "rdc":RdcdProcessor,
   }
 
-  tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
-                                                FLAGS.init_checkpoint)
+  tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,FLAGS.init_checkpoint)
 
   if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict:
     raise ValueError(
@@ -814,7 +1034,7 @@ def main(_):
 
   processor = processors[task_name]()
 
-  label_list = processor.get_labels()
+  label_list = processor.get_labels(FLAGS.data_dir)
 
   tokenizer = tokenization.FullTokenizer(
       vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case)
@@ -916,14 +1136,44 @@ def main(_):
         is_training=False,
         drop_remainder=eval_drop_remainder)
 
-    result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+    #result = estimator.evaluate(input_fn=eval_input_fn, steps=eval_steps)
+    result = estimator.predict(input_fn=eval_input_fn)
+    probs=[]  
+    labels=[]
+    num_written_lines = 0
+    for (i, prediction) in enumerate(result):
+      raw_probabilities = prediction["logits"]
+      label_ids = prediction["label_ids"]
+      if i >= num_actual_eval_examples:
+        break
+      #probabilities=to_np(raw_probabilities)
+      probs.append(raw_probabilities)
+      labels.append(label_ids)
+       #output_line = "\t".join(
+       #   str(class_probability)
+       #    for class_probability in probabilities) + "\n"
+       #writer.write(output_line)
+      num_written_lines += 1
+      
+    assert num_written_lines == num_actual_eval_examples
+    #probs=tf.stack(probs)
+    #labels=tf.stack(labels)
+    #print("debug: logits:",probs)
+    extra_result=extended_metric_fn(labels, probs)
+    output_predict_file = os.path.join(FLAGS.output_dir, "eval_results.tsv")
+    with tf.gfile.GFile(output_predict_file, "w") as writer:
 
-    output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
-    with tf.gfile.GFile(output_eval_file, "w") as writer:
-      tf.logging.info("***** Eval results *****")
-      for key in sorted(result.keys()):
-        tf.logging.info("  %s = %s", key, str(result[key]))
-        writer.write("%s = %s\n" % (key, str(result[key])))
+      tf.logging.info("***** Evaluation results *****")
+      for key in sorted(extra_result.keys()):
+        tf.logging.info("  %s = %s", key, str(extra_result[key]))
+        writer.write("%s = %s\n" % (key, str(extra_result[key])))
+
+    # output_eval_file = os.path.join(FLAGS.output_dir, "eval_results.txt")
+    # with tf.gfile.GFile(output_eval_file, "w") as writer:
+    #   tf.logging.info("***** Eval results *****")
+    #   for key in sorted(result.keys()):
+    #     tf.logging.info("  %s = %s", key, str(result[key]))
+    #     writer.write("%s = %s\n" % (key, str(result[key])))
 
   if FLAGS.do_predict:
     predict_examples = processor.get_test_examples(FLAGS.data_dir)
@@ -937,15 +1187,20 @@ def main(_):
         predict_examples.append(PaddingInputExample())
 
     predict_file = os.path.join(FLAGS.output_dir, "predict.tf_record")
-    file_based_convert_examples_to_features(predict_examples, label_list,
-                                            FLAGS.max_seq_length, tokenizer,
-                                            predict_file)
+    file_based_convert_examples_to_features(predict_examples, label_list,FLAGS.max_seq_length, tokenizer, predict_file)
 
     tf.logging.info("***** Running prediction*****")
     tf.logging.info("  Num examples = %d (%d actual, %d padding)",
                     len(predict_examples), num_actual_predict_examples,
                     len(predict_examples) - num_actual_predict_examples)
     tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
+    # This tells the estimator to run through the entire set.
+    pred_steps = None
+    # However, if running eval on the TPU, you will need to specify the
+    # number of steps.
+    if FLAGS.use_tpu:
+      assert len(predict_examples) % FLAGS.predict_batch_size == 0
+      pred_steps = int(len(predict_examples) // FLAGS.predict_batch_size)
 
     predict_drop_remainder = True if FLAGS.use_tpu else False
     predict_input_fn = file_based_input_fn_builder(
@@ -955,21 +1210,37 @@ def main(_):
         drop_remainder=predict_drop_remainder)
 
     result = estimator.predict(input_fn=predict_input_fn)
+    #result = estimator.evaluate(input_fn=predict_input_fn,steps=pred_steps)
 
+    #output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
+    probs=[]  
+    labels=[]
+    num_written_lines = 0
+    for (i, prediction) in enumerate(result):
+      raw_probabilities = prediction["logits"]
+      label_ids = prediction["label_ids"]
+      if i >= num_actual_predict_examples:
+        break
+      #probabilities=to_np(raw_probabilities)
+      probs.append(raw_probabilities)
+      labels.append(label_ids)
+      #output_line = "\t".join(
+      #   str(class_probability)
+      #    for class_probability in raw_probabilities) + "\n"
+      #print(output_line)
+      num_written_lines += 1
+      
+    assert num_written_lines == num_actual_predict_examples
+    #probs=tf.stack(probs)
+    #labels=tf.stack(labels)
+    extra_result=extended_metric_fn(labels, probs)
     output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
     with tf.gfile.GFile(output_predict_file, "w") as writer:
-      num_written_lines = 0
+      
       tf.logging.info("***** Predict results *****")
-      for (i, prediction) in enumerate(result):
-        probabilities = prediction["probabilities"]
-        if i >= num_actual_predict_examples:
-          break
-        output_line = "\t".join(
-            str(class_probability)
-            for class_probability in probabilities) + "\n"
-        writer.write(output_line)
-        num_written_lines += 1
-    assert num_written_lines == num_actual_predict_examples
+      for key in sorted(extra_result.keys()):
+        tf.logging.info("  %s = %s", key, str(extra_result[key]))
+        writer.write("%s = %s\n" % (key, str(extra_result[key])))
 
 
 if __name__ == "__main__":
